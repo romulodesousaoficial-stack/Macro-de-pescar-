@@ -21,16 +21,20 @@ jobs:
           S="$(find src -name settings.gradle.kts -print -quit)"
           [ -n "$S" ] || { echo "ERRO: settings.gradle.kts nao encontrado no zip"; exit 1; }
           echo "PROJ=$(dirname "$S")" >> "$GITHUB_ENV"
+          grep -rl --include='*.kt' 'catch (_:' src | xargs -r sed -i 's/catch (_:/catch (e:/g'
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
-
-      - name: Instalar plataforma 35
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+      - name: Preparar Android SDK
+        run: |
+          SDKM="$(ls "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -n 1)"
+          echo "sdkmanager: $SDKM"
+          [ -n "$SDKM" ] || exit 0
+          yes | "$SDKM" --licenses >/dev/null 2>&1 || true
+          "$SDKM" "platforms;android-35" "build-tools;34.0.0" >/dev/null 2>&1 || true
 
       - uses: gradle/actions/setup-gradle@v4
         with:
@@ -52,3 +56,4 @@ jobs:
         run: |
           cp "$PROJ/app/build/outputs/apk/debug/app-debug.apk" MineFishingMacro.apk
           gh release create "apk-${{ github.run_number }}-${{ github.run_attempt }}" MineFishingMacro.apk --repo "$GITHUB_REPOSITORY" --title "MineFishingMacro build ${{ github.run_number }}" --notes "APK de depuracao"
+          
