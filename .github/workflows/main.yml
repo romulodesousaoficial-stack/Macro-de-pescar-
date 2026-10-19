@@ -1,0 +1,54 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extrair o projeto
+        run: |
+          ls ./*.zip >/dev/null 2>&1 || { echo "ERRO: nao achei o .zip do projeto na raiz do repositorio"; exit 1; }
+          for z in ./*.zip; do unzip -qo "$z" -d src; done
+          S="$(find src -name settings.gradle.kts -print -quit)"
+          [ -n "$S" ] || { echo "ERRO: settings.gradle.kts nao encontrado no zip"; exit 1; }
+          echo "PROJ=$(dirname "$S")" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Instalar plataforma 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Compilar
+        working-directory: ${{ env.PROJ }}
+        run: gradle --no-daemon assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MineFishingMacro-debug-apk
+          path: ${{ env.PROJ }}/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Publicar em Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp "$PROJ/app/build/outputs/apk/debug/app-debug.apk" MineFishingMacro.apk
+          gh release create "apk-${{ github.run_number }}-${{ github.run_attempt }}" MineFishingMacro.apk --repo "$GITHUB_REPOSITORY" --title "MineFishingMacro build ${{ github.run_number }}" --notes "APK de depuracao"
